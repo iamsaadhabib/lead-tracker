@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead Tracker | Fivup Leads</title>
+<style>
+  :root { --bg:#f5f7fb; --card:#fff; --text:#1a2233; --muted:#6b7587; --primary:#3b49df; --border:#e3e7ef; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { background:var(--primary); color:#fff; padding:20px 16px; text-align:center; }
+  header h1 { margin:0; font-size:1.5rem; }
+  header p { margin:4px 0 0; opacity:.85; font-size:.9rem; }
+  main { max-width:960px; margin:0 auto; padding:16px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-bottom:16px; }
+  .stat { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; text-align:center; }
+  .stat b { display:block; font-size:1.6rem; }
+  .stat span { color:var(--muted); font-size:.8rem; }
+  form, .table-wrap { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px; }
+  form { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; }
+  input, select, button { font:inherit; padding:10px; border:1px solid var(--border); border-radius:8px; }
+  button { background:var(--primary); color:#fff; border:none; cursor:pointer; font-weight:600; }
+  button:hover { opacity:.9; }
+  .toolbar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .toolbar input, .toolbar select { flex:1; min-width:140px; }
+  .toolbar .secondary { background:#fff; color:var(--text); border:1px solid var(--border); }
+  table { width:100%; border-collapse:collapse; font-size:.92rem; }
+  th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:600; font-size:.8rem; text-transform:uppercase; }
+  .badge { padding:3px 9px; border-radius:20px; font-size:.78rem; font-weight:600; }
+  .New { background:#e8ecff; color:#3b49df; }
+  .Contacted { background:#fff3d6; color:#9a6a00; }
+  .Qualified { background:#e0f6e9; color:#177a43; }
+  .Won { background:#d4f1de; color:#0d5c30; }
+  .Lost { background:#fde3e3; color:#b3261e; }
+  td button { padding:5px 9px; font-size:.8rem; background:#fff; color:#b3261e; border:1px solid var(--border); }
+  .empty { text-align:center; color:var(--muted); padding:24px; }
+  .scroll { overflow-x:auto; }
+  footer { text-align:center; color:var(--muted); font-size:.82rem; padding:16px; }
+  footer a { color:var(--primary); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lead Tracker</h1>
+  <p>Track leads from first contact to closed deal</p>
+</header>
+
+<main>
+  <section class="stats" id="stats"></section>
+
+  <form id="leadForm">
+    <input name="name" placeholder="Contact name" required>
+    <input name="company" placeholder="Company" required>
+    <input name="email" type="email" placeholder="Email">
+    <select name="source">
+      <option>LinkedIn</option><option>Cold Email</option><option>Referral</option><option>Website</option><option>Other</option>
+    </select>
+    <select name="status">
+      <option>New</option><option>Contacted</option><option>Qualified</option><option>Won</option><option>Lost</option>
+    </select>
+    <button type="submit">Add Lead</button>
+  </form>
+
+  <div class="table-wrap">
+    <div class="toolbar">
+      <input id="search" placeholder="Search name or company...">
+      <select id="filter">
+        <option value="">All statuses</option>
+        <option>New</option><option>Contacted</option><option>Qualified</option><option>Won</option><option>Lost</option>
+      </select>
+      <button class="secondary" id="exportBtn" type="button">Export CSV</button>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Name</th><th>Company</th><th>Email</th><th>Source</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Built by Saad Habib, Founder of
+  <a href="https://fivupleads.com" target="_blank" rel="noopener">Fivup Leads</a> ·
+  <a href="https://www.linkedin.com/in/saad-habib-me/" target="_blank" rel="noopener">LinkedIn</a>
+</footer>
+
+<script>
+  const KEY = "fivup-lead-tracker";
+  const STATUSES = ["New", "Contacted", "Qualified", "Won", "Lost"];
+  let leads = [];
+  try { leads = JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { leads = []; }
+
+  const rowsEl = document.getElementById("rows");
+  const statsEl = document.getElementById("stats");
+  const searchEl = document.getElementById("search");
+  const filterEl = document.getElementById("filter");
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(leads)); } catch (e) {}
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  }
+
+  function renderStats() {
+    const counts = Object.fromEntries(STATUSES.map(s => [s, 0]));
+    leads.forEach(l => counts[l.status]++);
+    const total = leads.length;
+    const rate = total ? Math.round((counts.Won / total) * 100) : 0;
+    statsEl.innerHTML =
+      `<div class="stat"><b>${total}</b><span>Total leads</span></div>` +
+      STATUSES.map(s => `<div class="stat"><b>${counts[s]}</b><span>${s}</span></div>`).join("") +
+      `<div class="stat"><b>${rate}%</b><span>Win rate</span></div>`;
+  }
+
+  function renderRows() {
+    const q = searchEl.value.trim().toLowerCase();
+    const f = filterEl.value;
+    const list = leads.filter(l =>
+      (!f || l.status === f) &&
+      (!q || l.name.toLowerCase().includes(q) || l.company.toLowerCase().includes(q))
+    );
+    if (!list.length) {
+      rowsEl.innerHTML = `<tr><td colspan="6" class="empty">No leads yet. Add your first one above.</td></tr>`;
+      return;
+    }
+    rowsEl.innerHTML = list.map(l => `
+      <tr>
+        <td>${esc(l.name)}</td>
+        <td>${esc(l.company)}</td>
+        <td>${esc(l.email || "-")}</td>
+        <td>${esc(l.source)}</td>
+        <td>
+          <select data-id="${l.id}" class="statusSel">
+            ${STATUSES.map(s => `<option ${s === l.status ? "selected" : ""}>${s}</option>`).join("")}
+          </select>
+        </td>
+        <td><button data-del="${l.id}">Delete</button></td>
+      </tr>`).join("");
+  }
+
+  function render() { renderStats(); renderRows(); }
+
+  document.getElementById("leadForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    leads.unshift({ id: Date.now(), ...d });
+    save(); e.target.reset(); render();
+  });
+
+  rowsEl.addEventListener("change", e => {
+    if (e.target.classList.contains("statusSel")) {
+      const lead = leads.find(l => l.id == e.target.dataset.id);
+      if (lead) { lead.status = e.target.value; save(); render(); }
+    }
+  });
+
+  rowsEl.addEventListener("click", e => {
+    const id = e.target.dataset.del;
+    if (id) { leads = leads.filter(l => l.id != id); save(); render(); }
+  });
+
+  searchEl.addEventListener("input", renderRows);
+  filterEl.addEventListener("change", renderRows);
+
+  document.getElementById("exportBtn").addEventListener("click", () => {
+    const header = ["Name", "Company", "Email", "Source", "Status"];
+    const cell = v => `"${String(v || "").replace(/"/g, '""')}"`;
+    const csv = [header.join(",")]
+      .concat(leads.map(l => [l.name, l.company, l.email, l.source, l.status].map(cell).join(",")))
+      .join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "leads.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  render();
+</script>
+</body>
+</html>
